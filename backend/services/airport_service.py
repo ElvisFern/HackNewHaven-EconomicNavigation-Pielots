@@ -3,7 +3,7 @@ from typing import Dict, Optional, Union
 
 import pandas as pd
 
-from models.schemas import AirportResponse
+from backend.models.schemas import AirportResponse
 
 
 class AirportLookupError(Exception):

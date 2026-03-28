@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple
 
 import requests
 
-from models.schemas import (
+from backend.models.schemas import (
     PreflightRequest,
     RouteSegmentWithWeather,
     RouteWithSegmentWeather,
@@ -285,6 +285,41 @@ class PressureLevelWeatherService:
                     latitude=segment.midpoint_lat,
                     longitude=segment.midpoint_lon,
                     departure_time=request.departure_time,
+                    target_cruise_altitude_ft=target_cruise_altitude_ft,
+                )
+
+                segments_with_weather.append(
+                    RouteSegmentWithWeather(
+                        segment=segment,
+                        weather=weather,
+                    )
+                )
+
+            results.append(
+                RouteWithSegmentWeather(
+                    route=route_with_segments.route,
+                    segments_with_weather=segments_with_weather,
+                )
+            )
+
+        return results
+
+    def attach_weather_with_overrides(
+        self,
+        routes_with_segments: List[RouteWithSegments],
+        forecast_time: datetime,
+        target_cruise_altitude_ft: int,
+    ) -> List[RouteWithSegmentWeather]:
+        results: List[RouteWithSegmentWeather] = []
+
+        for route_with_segments in routes_with_segments:
+            segments_with_weather: List[RouteSegmentWithWeather] = []
+
+            for segment in route_with_segments.segments:
+                weather = self.get_segment_weather(
+                    latitude=segment.midpoint_lat,
+                    longitude=segment.midpoint_lon,
+                    departure_time=forecast_time,
                     target_cruise_altitude_ft=target_cruise_altitude_ft,
                 )
 

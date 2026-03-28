@@ -2,19 +2,31 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from models.schemas import (
+from backend.models.schemas import (
+    InflightPerformanceResponse,
+    InflightRequest,
     PreflightPerformanceResponse,
     PreflightRequest,
     PreflightRoutesResponse,
     PreflightWeatherResponse,
     PreflightWindResponse,
+    Waypoint,
 )
-from services.airport_service import AirportLookupError, AirportLookupService
-from services.performance_service import PerformanceService, PerformanceServiceError
-from services.route_generator import generate_candidate_routes
-from services.segment_builder import build_all_route_segments
-from services.weather_service import PressureLevelWeatherService, WeatherServiceError
-from services.wind_service import WindAnalysisService
+from backend.services.airport_service import AirportLookupError, AirportLookupService
+from backend.services.performance_service import (
+    PerformanceService,
+    PerformanceServiceError,
+)
+from backend.services.route_generator import (
+    generate_candidate_routes,
+    generate_candidate_routes_from_waypoints,
+)
+from backend.services.segment_builder import build_all_route_segments
+from backend.services.weather_service import (
+    PressureLevelWeatherService,
+    WeatherServiceError,
+)
+from backend.services.wind_service import WindAnalysisService
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -272,6 +284,98 @@ def generate_preflight_performance(request: PreflightRequest):
             tas_used_kt=tas_used_kt,
             aircraft_mass_kg=aircraft_mass_kg,
             cruise_altitude_ft=cruise_altitude_ft,
+            routes_performance=routes_performance,
+            best_route=best_route,
+        )
+
+    except AirportLookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WeatherServiceError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except PerformanceServiceError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected server error: {str(e)}"
+        )
+
+
+@app.post("/inflight/performance", response_model=InflightPerformanceResponse)
+def generate_inflight_performance(request: InflightRequest):
+    if (
+        airport_service is None
+        or weather_service is None
+        or wind_service is None
+        or performance_service is None
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service failed to initialize: {startup_error}",
+        )
+
+    try:
+        destination_airport = airport_service.get_airport_response(request.destination)
+        current_position = Waypoint(
+            name="CURRENT_POSITION",
+            lat=request.current_lat,
+            lon=request.current_lon,
+        )
+        destination_waypoint = Waypoint(
+            name=destination_airport.code,
+            lat=destination_airport.lat,
+            lon=destination_airport.lon,
+        )
+
+        candidate_routes = generate_candidate_routes_from_waypoints(
+            current_position, destination_waypoint
+        )
+        routes_with_segments = build_all_route_segments(candidate_routes)
+
+        routes_with_segment_weather = weather_service.attach_weather_with_overrides(
+            routes_with_segments=routes_with_segments,
+            forecast_time=request.current_time,
+            target_cruise_altitude_ft=request.current_altitude_ft,
+        )
+
+        tas_requested = request.current_tas_kt or wind_service.get_default_tas_kt(
+            request.aircraft
+        )
+        tas_used_kt, routes_with_wind_analysis = (
+            wind_service.attach_wind_components_with_tas(
+                tas_kt=tas_requested,
+                routes_with_segment_weather=routes_with_segment_weather,
+            )
+        )
+
+        aircraft_mass_kg = (
+            request.current_mass_kg
+            if request.current_mass_kg is not None
+            else performance_service.get_default_mass_kg(request.aircraft)
+        )
+
+        (
+            aircraft_mass_kg,
+            cruise_altitude_ft,
+            routes_performance,
+            best_route,
+        ) = performance_service.evaluate_routes_with_overrides(
+            aircraft=request.aircraft,
+            tas_used_kt=tas_used_kt,
+            routes_with_wind_analysis=routes_with_wind_analysis,
+            mass_kg=aircraft_mass_kg,
+            cruise_altitude_ft=request.current_altitude_ft,
+        )
+
+        return InflightPerformanceResponse(
+            request=request,
+            current_position=current_position,
+            destination_airport=destination_airport,
+            tas_used_kt=tas_used_kt,
+            aircraft_mass_kg=aircraft_mass_kg,
+            cruise_altitude_ft=cruise_altitude_ft,
+            remaining_fuel_kg=request.remaining_fuel_kg,
             routes_performance=routes_performance,
             best_route=best_route,
         )

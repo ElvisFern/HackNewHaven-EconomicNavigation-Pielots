@@ -41,6 +41,45 @@ class PreflightRequest(BaseModel):
         return self
 
 
+class InflightRequest(BaseModel):
+    destination: str = Field(
+        ..., min_length=3, max_length=4, description="IATA or ICAO airport code"
+    )
+    aircraft: str = Field(..., description="Supported aircraft code")
+    current_time: datetime = Field(
+        ..., description="Current in-flight datetime in ISO format"
+    )
+    current_lat: float = Field(..., ge=-90, le=90)
+    current_lon: float = Field(..., ge=-180, le=180)
+    current_altitude_ft: int = Field(..., ge=0, le=60000)
+    current_mass_kg: Optional[float] = Field(default=None, gt=0)
+    remaining_fuel_kg: Optional[float] = Field(default=None, ge=0)
+    current_tas_kt: Optional[float] = Field(default=None, gt=0)
+
+    @field_validator("destination")
+    @classmethod
+    def normalize_destination_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("aircraft")
+    @classmethod
+    def normalize_aircraft(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in SUPPORTED_AIRCRAFT:
+            raise ValueError(
+                f"Unsupported aircraft '{value}'. Supported aircraft: {sorted(SUPPORTED_AIRCRAFT)}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_mass_inputs(self) -> "InflightRequest":
+        if self.current_mass_kg is None and self.remaining_fuel_kg is None:
+            raise ValueError(
+                "Provide at least one of current_mass_kg or remaining_fuel_kg."
+            )
+        return self
+
+
 class AirportResponse(BaseModel):
     code: str
     name: str
@@ -178,5 +217,17 @@ class PreflightPerformanceResponse(BaseModel):
     tas_used_kt: float
     aircraft_mass_kg: float
     cruise_altitude_ft: int
+    routes_performance: List[RoutePerformance]
+    best_route: BestRouteSummary
+
+
+class InflightPerformanceResponse(BaseModel):
+    request: InflightRequest
+    current_position: Waypoint
+    destination_airport: AirportResponse
+    tas_used_kt: float
+    aircraft_mass_kg: float
+    cruise_altitude_ft: int
+    remaining_fuel_kg: Optional[float] = None
     routes_performance: List[RoutePerformance]
     best_route: BestRouteSummary

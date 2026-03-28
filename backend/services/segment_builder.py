@@ -1,7 +1,12 @@
 import math
 from typing import List, Tuple
 
-from models.schemas import CandidateRoute, RouteSegment, RouteWithSegments, Waypoint
+from backend.models.schemas import (
+    CandidateRoute,
+    RouteSegment,
+    RouteWithSegments,
+    Waypoint,
+)
 
 
 EARTH_RADIUS_NM = 3440.065  # nautical miles
