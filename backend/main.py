@@ -2,10 +2,17 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from models.schemas import PreflightRequest, PreflightRoutesResponse
+from models.schemas import (
+    PreflightRequest,
+    PreflightRoutesResponse,
+    PreflightWeatherResponse,
+    PreflightWindResponse,
+)
 from services.airport_service import AirportLookupError, AirportLookupService
 from services.route_generator import generate_candidate_routes
 from services.segment_builder import build_all_route_segments
+from services.weather_service import PressureLevelWeatherService, WeatherServiceError
+from services.wind_service import WindAnalysisService
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -13,18 +20,23 @@ AIRPORT_DATA_FILE = BASE_DIR / "data" / "airports.csv"
 
 app = FastAPI(
     title="Pre-Flight Route Recommendation API",
-    version="0.2.0",
+    version="0.4.0",
     description=(
         "Pre-flight MVP API for input validation, dynamic airport lookup, "
-        "candidate route generation, and route segmentation."
+        "candidate route generation, route segmentation, pressure-level weather lookup, "
+        "and wind component analysis."
     ),
 )
 
 startup_error = None
 airport_service = None
+weather_service = None
+wind_service = None
 
 try:
     airport_service = AirportLookupService(AIRPORT_DATA_FILE)
+    weather_service = PressureLevelWeatherService()
+    wind_service = WindAnalysisService()
 except Exception as e:
     startup_error = str(e)
 
@@ -53,7 +65,7 @@ def health():
             status_code=500,
             detail={
                 "status": "error",
-                "message": "Airport service failed to initialize.",
+                "message": "Service failed to initialize.",
                 "detail": startup_error,
             },
         )
@@ -99,7 +111,9 @@ def generate_preflight_routes(request: PreflightRequest):
         origin_airport = airport_service.get_airport_response(request.origin)
         destination_airport = airport_service.get_airport_response(request.destination)
 
-        candidate_routes = generate_candidate_routes(origin_airport, destination_airport)
+        candidate_routes = generate_candidate_routes(
+            origin_airport, destination_airport
+        )
         routes_with_segments = build_all_route_segments(candidate_routes)
 
         return PreflightRoutesResponse(
@@ -112,6 +126,95 @@ def generate_preflight_routes(request: PreflightRequest):
 
     except AirportLookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected server error: {str(e)}",
+        )
+
+
+@app.post("/preflight/weather", response_model=PreflightWeatherResponse)
+def generate_preflight_weather(request: PreflightRequest):
+    if airport_service is None or weather_service is None:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service failed to initialize: {startup_error}",
+        )
+
+    try:
+        origin_airport = airport_service.get_airport_response(request.origin)
+        destination_airport = airport_service.get_airport_response(request.destination)
+
+        candidate_routes = generate_candidate_routes(
+            origin_airport, destination_airport
+        )
+        routes_with_segments = build_all_route_segments(candidate_routes)
+        routes_with_segment_weather = weather_service.attach_weather_to_routes(
+            request=request,
+            routes_with_segments=routes_with_segments,
+        )
+
+        return PreflightWeatherResponse(
+            request=request,
+            origin_airport=origin_airport,
+            destination_airport=destination_airport,
+            routes_with_segment_weather=routes_with_segment_weather,
+        )
+
+    except AirportLookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WeatherServiceError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected server error: {str(e)}",
+        )
+
+
+@app.post("/preflight/wind", response_model=PreflightWindResponse)
+def generate_preflight_wind_analysis(request: PreflightRequest):
+    if airport_service is None or weather_service is None or wind_service is None:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service failed to initialize: {startup_error}",
+        )
+
+    try:
+        origin_airport = airport_service.get_airport_response(request.origin)
+        destination_airport = airport_service.get_airport_response(request.destination)
+
+        candidate_routes = generate_candidate_routes(
+            origin_airport, destination_airport
+        )
+        routes_with_segments = build_all_route_segments(candidate_routes)
+
+        routes_with_segment_weather = weather_service.attach_weather_to_routes(
+            request=request,
+            routes_with_segments=routes_with_segments,
+        )
+
+        tas_used_kt, routes_with_wind_analysis = wind_service.attach_wind_components(
+            request=request,
+            routes_with_segment_weather=routes_with_segment_weather,
+        )
+
+        return PreflightWindResponse(
+            request=request,
+            origin_airport=origin_airport,
+            destination_airport=destination_airport,
+            tas_used_kt=tas_used_kt,
+            routes_with_wind_analysis=routes_with_wind_analysis,
+        )
+
+    except AirportLookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WeatherServiceError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
