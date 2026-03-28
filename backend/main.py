@@ -22,7 +22,7 @@ AIRPORT_DATA_FILE = BASE_DIR / "data" / "airports.csv"
 
 app = FastAPI(
     title="Pre-Flight Route Recommendation API",
-    version="0.5.0",
+    version="0.6.0",
     description=(
         "Pre-flight MVP API for input validation, dynamic airport lookup, "
         "candidate route generation, route segmentation, pressure-level weather lookup, "
@@ -59,6 +59,7 @@ def root():
         "message": "Pre-flight API is running.",
         "airport_data_source": str(AIRPORT_DATA_FILE.name),
         "supported_aircraft": ["c550", "glf6"],
+        "supported_objectives": ["fuel", "time", "emissions"],
     }
 
 
@@ -257,12 +258,16 @@ def generate_preflight_performance(request: PreflightRequest):
             routes_with_segment_weather=routes_with_segment_weather,
         )
 
-        aircraft_mass_kg, cruise_altitude_ft, routes_performance, best_route = (
-            performance_service.evaluate_routes(
-                request=request,
-                tas_used_kt=tas_used_kt,
-                routes_with_wind_analysis=routes_with_wind_analysis,
-            )
+        (
+            aircraft_mass_kg,
+            cruise_altitude_ft,
+            objective_used,
+            routes_performance,
+            best_route,
+        ) = performance_service.evaluate_routes(
+            request=request,
+            tas_used_kt=tas_used_kt,
+            routes_with_wind_analysis=routes_with_wind_analysis,
         )
 
         return PreflightPerformanceResponse(
@@ -272,6 +277,7 @@ def generate_preflight_performance(request: PreflightRequest):
             tas_used_kt=tas_used_kt,
             aircraft_mass_kg=aircraft_mass_kg,
             cruise_altitude_ft=cruise_altitude_ft,
+            objective_used=objective_used,
             routes_performance=routes_performance,
             best_route=best_route,
         )

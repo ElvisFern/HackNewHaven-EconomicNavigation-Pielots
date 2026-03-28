@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 SUPPORTED_AIRCRAFT = {"c550", "glf6"}
+SUPPORTED_OBJECTIVES = {"fuel", "time", "emissions"}
 
 
 class PreflightRequest(BaseModel):
@@ -17,6 +18,10 @@ class PreflightRequest(BaseModel):
     aircraft: str = Field(..., description="Supported aircraft code")
     departure_time: datetime = Field(
         ..., description="Planned departure datetime in ISO format"
+    )
+    objective: str = Field(
+        default="fuel",
+        description="Optimization objective: fuel, time, or emissions",
     )
 
     @field_validator("origin", "destination")
@@ -31,6 +36,16 @@ class PreflightRequest(BaseModel):
         if value not in SUPPORTED_AIRCRAFT:
             raise ValueError(
                 f"Unsupported aircraft '{value}'. Supported aircraft: {sorted(SUPPORTED_AIRCRAFT)}"
+            )
+        return value
+
+    @field_validator("objective")
+    @classmethod
+    def normalize_objective(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in SUPPORTED_OBJECTIVES:
+            raise ValueError(
+                f"Unsupported objective '{value}'. Supported objectives: {sorted(SUPPORTED_OBJECTIVES)}"
             )
         return value
 
@@ -165,6 +180,7 @@ class RoutePerformance(BaseModel):
 class BestRouteSummary(BaseModel):
     route_id: str
     route_type: str
+    objective_used: str
     total_distance_nm: float
     total_time_min: float
     total_fuel_kg: float
@@ -178,5 +194,6 @@ class PreflightPerformanceResponse(BaseModel):
     tas_used_kt: float
     aircraft_mass_kg: float
     cruise_altitude_ft: int
+    objective_used: str
     routes_performance: List[RoutePerformance]
     best_route: BestRouteSummary

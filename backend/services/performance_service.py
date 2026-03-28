@@ -47,13 +47,28 @@ class PerformanceService:
                 f"Failed to initialize OpenAP models for '{aircraft}': {e}"
             ) from e
 
+    def _select_best_route(
+        self,
+        routes_performance: List[RoutePerformance],
+        objective: str,
+    ) -> RoutePerformance:
+        if objective == "fuel":
+            return min(routes_performance, key=lambda r: r.total_fuel_kg)
+        if objective == "time":
+            return min(routes_performance, key=lambda r: r.total_time_min)
+        if objective == "emissions":
+            return min(routes_performance, key=lambda r: r.total_co2_kg)
+
+        raise PerformanceServiceError(f"Unsupported objective selection: {objective}")
+
     def evaluate_routes(
         self,
         request: PreflightRequest,
         tas_used_kt: float,
         routes_with_wind_analysis: List[RouteWithWindAnalysis],
-    ) -> tuple[float, int, List[RoutePerformance], BestRouteSummary]:
+    ) -> tuple[float, int, str, List[RoutePerformance], BestRouteSummary]:
         aircraft = request.aircraft.lower()
+        objective = request.objective.lower()
         mass_kg = self.get_default_mass_kg(aircraft)
         cruise_altitude_ft = self.get_default_cruise_altitude_ft(aircraft)
 
@@ -142,15 +157,16 @@ class PerformanceService:
                 "No route performance results were generated."
             )
 
-        best = min(routes_performance, key=lambda r: r.total_fuel_kg)
+        best = self._select_best_route(routes_performance, objective)
 
         best_route = BestRouteSummary(
             route_id=best.route.route_id,
             route_type=best.route.type,
+            objective_used=objective,
             total_distance_nm=best.total_distance_nm,
             total_time_min=best.total_time_min,
             total_fuel_kg=best.total_fuel_kg,
             total_co2_kg=best.total_co2_kg,
         )
 
-        return mass_kg, cruise_altitude_ft, routes_performance, best_route
+        return mass_kg, cruise_altitude_ft, objective, routes_performance, best_route
