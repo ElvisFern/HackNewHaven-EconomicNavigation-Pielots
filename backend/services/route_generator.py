@@ -1,7 +1,7 @@
 import math
 from typing import List
 
-from models.schemas import AirportResponse, CandidateRoute, Waypoint
+from backend.models.schemas import AirportResponse, CandidateRoute, Waypoint
 
 
 def _euclidean_degree_distance(

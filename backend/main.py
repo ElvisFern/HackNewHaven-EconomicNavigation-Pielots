@@ -2,9 +2,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from models.schemas import PreflightRequest, Step1To3Response
-from services.airport_service import AirportLookupError, AirportLookupService
-from services.route_generator import generate_candidate_routes
+from backend.models.schemas import PreflightRequest, Step1To3Response
+from backend.services.airport_service import AirportLookupError, AirportLookupService
+from backend.services.route_generator import generate_candidate_routes
+from backend.services.weather_service import get_metar, WeatherServiceError
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -84,6 +85,33 @@ def get_airport(code: str):
             status_code=500,
             detail=f"Unexpected server error: {str(e)}",
         )
+
+
+@app.get("/weather/{code}")
+def weather_for_airport(code: str):
+    if startup_error:
+        raise HTTPException(status_code=500, detail=f"Service startup error: {startup_error}")
+
+    try:
+        lookup_code = code.strip().upper()
+
+        # If we have the airport service, try to resolve IATA (3-letter) to ICAO
+        if airport_service is not None:
+            try:
+                record = airport_service.get_airport_record(lookup_code)
+                icao_code = record.get("icao_code") or lookup_code
+            except AirportLookupError:
+                # Not found in dataset; fall back to using the provided code.
+                icao_code = lookup_code
+        else:
+            icao_code = lookup_code
+
+        metar = get_metar(icao_code)
+        return {"query_code": lookup_code, "resolved_icao": icao_code, "metar": metar}
+    except WeatherServiceError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
 
 
 @app.post("/preflight/step1-3", response_model=Step1To3Response)

@@ -23,3 +23,26 @@ except ValueError:
     print("Response was not valid JSON.")
     print("Raw response:")
     print(response.text)
+
+
+# --- weather endpoint smoke tests ---
+WEATHER_BASE = "http://127.0.0.1:8000/weather/"
+
+def test_weather_code(code: str):
+    try:
+        r = requests.get(WEATHER_BASE + code, timeout=15)
+        print(f"\nWeather test for {code} -> Status Code: {r.status_code}")
+        try:
+            print("Response JSON:")
+            print(r.json())
+        except ValueError:
+            print("Response not JSON:")
+            print(r.text)
+    except requests.exceptions.RequestException as e:
+        print(f"Weather request failed for {code}: {e}")
+
+
+if __name__ == "__main__":
+    # Try both IATA and ICAO forms
+    test_weather_code("JFK")
+    test_weather_code("KJFK")
