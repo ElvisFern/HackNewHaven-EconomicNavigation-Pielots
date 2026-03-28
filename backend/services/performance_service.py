@@ -1,8 +1,6 @@
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-from openap import Emission, FuelFlow
-
-from models.schemas import (
+from backend.models.schemas import (
     BestRouteSummary,
     PreflightRequest,
     RoutePerformance,
@@ -37,11 +35,17 @@ class PerformanceService:
     def get_default_cruise_altitude_ft(self, aircraft: str) -> int:
         return self.DEFAULT_CRUISE_ALTITUDE_FT.get(aircraft.lower(), 35000)
 
-    def _get_openap_models(self, aircraft: str) -> Tuple[FuelFlow, Emission]:
+    def _get_openap_models(self, aircraft: str) -> Tuple[Any, Any]:
         try:
+            from openap import Emission, FuelFlow
+
             ff_model = FuelFlow(ac=aircraft)
             em_model = Emission(ac=aircraft)
             return ff_model, em_model
+        except ModuleNotFoundError as e:
+            raise PerformanceServiceError(
+                "The 'openap' package is not installed. Install dependencies before using performance endpoints."
+            ) from e
         except Exception as e:
             raise PerformanceServiceError(
                 f"Failed to initialize OpenAP models for '{aircraft}': {e}"
@@ -56,6 +60,28 @@ class PerformanceService:
         aircraft = request.aircraft.lower()
         mass_kg = self.get_default_mass_kg(aircraft)
         cruise_altitude_ft = self.get_default_cruise_altitude_ft(aircraft)
+        return self.evaluate_routes_with_overrides(
+            aircraft=aircraft,
+            tas_used_kt=tas_used_kt,
+            routes_with_wind_analysis=routes_with_wind_analysis,
+            mass_kg=mass_kg,
+            cruise_altitude_ft=cruise_altitude_ft,
+        )
+
+    def evaluate_routes_with_overrides(
+        self,
+        aircraft: str,
+        tas_used_kt: float,
+        routes_with_wind_analysis: List[RouteWithWindAnalysis],
+        mass_kg: float,
+        cruise_altitude_ft: int,
+    ) -> tuple[float, int, List[RoutePerformance], BestRouteSummary]:
+        if mass_kg <= 0:
+            raise PerformanceServiceError("mass_kg must be greater than zero.")
+        if cruise_altitude_ft < 0:
+            raise PerformanceServiceError(
+                "cruise_altitude_ft must be zero or greater."
+            )
 
         ff_model, em_model = self._get_openap_models(aircraft)
 

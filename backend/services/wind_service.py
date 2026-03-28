@@ -1,7 +1,7 @@
 import math
 from typing import Dict, List
 
-from models.schemas import (
+from backend.models.schemas import (
     PreflightRequest,
     RouteSegmentWithWeather,
     RouteSegmentWithWind,
@@ -82,6 +82,18 @@ class WindAnalysisService:
         routes_with_segment_weather: List[RouteWithSegmentWeather],
     ) -> tuple[float, List[RouteWithWindAnalysis]]:
         tas_kt = self.get_default_tas_kt(request.aircraft)
+        return self.attach_wind_components_with_tas(
+            tas_kt=tas_kt,
+            routes_with_segment_weather=routes_with_segment_weather,
+        )
+
+    def attach_wind_components_with_tas(
+        self,
+        tas_kt: float,
+        routes_with_segment_weather: List[RouteWithSegmentWeather],
+    ) -> tuple[float, List[RouteWithWindAnalysis]]:
+        if tas_kt <= 0:
+            raise ValueError("tas_kt must be greater than zero.")
 
         results: List[RouteWithWindAnalysis] = []
 

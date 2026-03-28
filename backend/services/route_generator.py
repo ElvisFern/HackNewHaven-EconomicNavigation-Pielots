@@ -1,7 +1,7 @@
 import math
 from typing import List
 
-from models.schemas import AirportResponse, CandidateRoute, Waypoint
+from backend.models.schemas import AirportResponse, CandidateRoute, Waypoint
 
 
 def _euclidean_degree_distance(
@@ -88,23 +88,49 @@ def generate_candidate_routes(
         name=destination.code, lat=destination.lat, lon=destination.lon
     )
 
-    left_mid, right_mid = _compute_perpendicular_offset(origin, destination)
+    return generate_candidate_routes_from_waypoints(origin_wp, destination_wp)
+
+
+def generate_candidate_routes_from_waypoints(
+    origin: Waypoint,
+    destination: Waypoint,
+) -> List[CandidateRoute]:
+    """
+    Generate three simple candidate routes from any two waypoints.
+    """
+    if origin.lat == destination.lat and origin.lon == destination.lon:
+        raise ValueError("Origin and destination coordinates are identical.")
+
+    origin_airport = AirportResponse(
+        code=origin.name,
+        name=origin.name,
+        lat=origin.lat,
+        lon=origin.lon,
+    )
+    destination_airport = AirportResponse(
+        code=destination.name,
+        name=destination.name,
+        lat=destination.lat,
+        lon=destination.lon,
+    )
+
+    left_mid, right_mid = _compute_perpendicular_offset(origin_airport, destination_airport)
 
     routes = [
         CandidateRoute(
             route_id="A",
             type="direct",
-            waypoints=[origin_wp, destination_wp],
+            waypoints=[origin, destination],
         ),
         CandidateRoute(
             route_id="B",
             type="offset_left",
-            waypoints=[origin_wp, left_mid, destination_wp],
+            waypoints=[origin, left_mid, destination],
         ),
         CandidateRoute(
             route_id="C",
             type="offset_right",
-            waypoints=[origin_wp, right_mid, destination_wp],
+            waypoints=[origin, right_mid, destination],
         ),
     ]
 
