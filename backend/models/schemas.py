@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -8,16 +8,10 @@ SUPPORTED_AIRCRAFT = {"c550", "glf6"}
 
 
 class PreflightRequest(BaseModel):
-    origin: str = Field(
-        ..., min_length=3, max_length=4, description="IATA or ICAO airport code"
-    )
-    destination: str = Field(
-        ..., min_length=3, max_length=4, description="IATA or ICAO airport code"
-    )
+    origin: str = Field(..., min_length=3, max_length=4, description="IATA or ICAO airport code")
+    destination: str = Field(..., min_length=3, max_length=4, description="IATA or ICAO airport code")
     aircraft: str = Field(..., description="Supported aircraft code")
-    departure_time: datetime = Field(
-        ..., description="Planned departure datetime in ISO format"
-    )
+    departure_time: datetime = Field(..., description="Planned departure datetime in ISO format")
 
     @field_validator("origin", "destination")
     @classmethod
@@ -41,24 +35,6 @@ class PreflightRequest(BaseModel):
         return self
 
 
-class AirportRecord(BaseModel):
-    iata: Optional[str] = Field(default=None, description="IATA airport code")
-    icao: Optional[str] = Field(default=None, description="ICAO airport code")
-    name: str = Field(..., description="Airport name")
-    lat: float = Field(..., ge=-90, le=90, description="Latitude in decimal degrees")
-    lon: float = Field(..., ge=-180, le=180, description="Longitude in decimal degrees")
-
-    @field_validator("iata")
-    @classmethod
-    def normalize_iata(cls, value: Optional[str]) -> Optional[str]:
-        return value.strip().upper() if value else value
-
-    @field_validator("icao")
-    @classmethod
-    def normalize_icao(cls, value: Optional[str]) -> Optional[str]:
-        return value.strip().upper() if value else value
-
-
 class AirportResponse(BaseModel):
     code: str = Field(..., description="Airport code used in the request")
     name: str = Field(..., description="Airport name")
@@ -74,16 +50,28 @@ class Waypoint(BaseModel):
 
 class CandidateRoute(BaseModel):
     route_id: str = Field(..., description="Unique route identifier")
-    type: Literal["direct", "offset_left", "offset_right"] = Field(
-        ..., description="Route type"
-    )
-    waypoints: List[Waypoint] = Field(
-        ..., min_length=2, description="Ordered waypoint list"
-    )
+    type: Literal["direct", "offset_left", "offset_right"] = Field(..., description="Route type")
+    waypoints: List[Waypoint] = Field(..., min_length=2, description="Ordered waypoint list")
 
 
-class Step1To3Response(BaseModel):
+class RouteSegment(BaseModel):
+    segment_id: str = Field(..., description="Unique segment identifier")
+    start_waypoint: Waypoint
+    end_waypoint: Waypoint
+    distance_nm: float = Field(..., description="Segment distance in nautical miles")
+    bearing_deg: float = Field(..., ge=0, lt=360, description="Initial bearing in degrees")
+    midpoint_lat: float = Field(..., ge=-90, le=90, description="Midpoint latitude")
+    midpoint_lon: float = Field(..., ge=-180, le=180, description="Midpoint longitude")
+
+
+class RouteWithSegments(BaseModel):
+    route: CandidateRoute
+    segments: List[RouteSegment] = Field(..., description="Segments derived from the route")
+
+
+class PreflightRoutesResponse(BaseModel):
     request: PreflightRequest
     origin_airport: AirportResponse
     destination_airport: AirportResponse
     candidate_routes: List[CandidateRoute]
+    routes_with_segments: List[RouteWithSegments]

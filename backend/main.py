@@ -2,9 +2,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
-from models.schemas import PreflightRequest, Step1To3Response
+from models.schemas import PreflightRequest, PreflightRoutesResponse
 from services.airport_service import AirportLookupError, AirportLookupService
 from services.route_generator import generate_candidate_routes
+from services.segment_builder import build_all_route_segments
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -12,10 +13,10 @@ AIRPORT_DATA_FILE = BASE_DIR / "data" / "airports.csv"
 
 app = FastAPI(
     title="Pre-Flight Route Recommendation API",
-    version="0.1.0",
+    version="0.2.0",
     description=(
-        "Pre-flight MVP API for input validation, dynamic airport lookup from CSV, "
-        "and candidate route generation."
+        "Pre-flight MVP API for input validation, dynamic airport lookup, "
+        "candidate route generation, and route segmentation."
     ),
 )
 
@@ -86,8 +87,8 @@ def get_airport(code: str):
         )
 
 
-@app.post("/preflight/step1-3", response_model=Step1To3Response)
-def preflight_step1_3(request: PreflightRequest):
+@app.post("/preflight/routes", response_model=PreflightRoutesResponse)
+def generate_preflight_routes(request: PreflightRequest):
     if airport_service is None:
         raise HTTPException(
             status_code=500,
@@ -98,15 +99,15 @@ def preflight_step1_3(request: PreflightRequest):
         origin_airport = airport_service.get_airport_response(request.origin)
         destination_airport = airport_service.get_airport_response(request.destination)
 
-        candidate_routes = generate_candidate_routes(
-            origin_airport, destination_airport
-        )
+        candidate_routes = generate_candidate_routes(origin_airport, destination_airport)
+        routes_with_segments = build_all_route_segments(candidate_routes)
 
-        return Step1To3Response(
+        return PreflightRoutesResponse(
             request=request,
             origin_airport=origin_airport,
             destination_airport=destination_airport,
             candidate_routes=candidate_routes,
+            routes_with_segments=routes_with_segments,
         )
 
     except AirportLookupError as e:
