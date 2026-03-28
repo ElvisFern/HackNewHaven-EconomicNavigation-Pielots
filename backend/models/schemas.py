@@ -42,45 +42,37 @@ class PreflightRequest(BaseModel):
 
 
 class AirportResponse(BaseModel):
-    code: str = Field(..., description="Airport code used in the request")
-    name: str = Field(..., description="Airport name")
-    lat: float = Field(..., description="Latitude in decimal degrees")
-    lon: float = Field(..., description="Longitude in decimal degrees")
+    code: str
+    name: str
+    lat: float
+    lon: float
 
 
 class Waypoint(BaseModel):
-    name: str = Field(..., description="Waypoint label")
-    lat: float = Field(..., ge=-90, le=90, description="Latitude in decimal degrees")
-    lon: float = Field(..., ge=-180, le=180, description="Longitude in decimal degrees")
+    name: str
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
 
 
 class CandidateRoute(BaseModel):
-    route_id: str = Field(..., description="Unique route identifier")
-    type: Literal["direct", "offset_left", "offset_right"] = Field(
-        ..., description="Route type"
-    )
-    waypoints: List[Waypoint] = Field(
-        ..., min_length=2, description="Ordered waypoint list"
-    )
+    route_id: str
+    type: Literal["direct", "offset_left", "offset_right"]
+    waypoints: List[Waypoint] = Field(..., min_length=2)
 
 
 class RouteSegment(BaseModel):
-    segment_id: str = Field(..., description="Unique segment identifier")
+    segment_id: str
     start_waypoint: Waypoint
     end_waypoint: Waypoint
-    distance_nm: float = Field(..., description="Segment distance in nautical miles")
-    bearing_deg: float = Field(
-        ..., ge=0, lt=360, description="Initial bearing in degrees"
-    )
-    midpoint_lat: float = Field(..., ge=-90, le=90, description="Midpoint latitude")
-    midpoint_lon: float = Field(..., ge=-180, le=180, description="Midpoint longitude")
+    distance_nm: float
+    bearing_deg: float = Field(..., ge=0, lt=360)
+    midpoint_lat: float = Field(..., ge=-90, le=90)
+    midpoint_lon: float = Field(..., ge=-180, le=180)
 
 
 class RouteWithSegments(BaseModel):
     route: CandidateRoute
-    segments: List[RouteSegment] = Field(
-        ..., description="Segments derived from the route"
-    )
+    segments: List[RouteSegment]
 
 
 class PreflightRoutesResponse(BaseModel):
@@ -92,31 +84,15 @@ class PreflightRoutesResponse(BaseModel):
 
 
 class SegmentWeather(BaseModel):
-    selected_pressure_level_hpa: int = Field(
-        ..., description="Pressure level selected for the target cruise altitude"
-    )
-    selected_geopotential_height_m: float = Field(
-        ..., description="Geopotential height of the selected pressure level"
-    )
-    target_cruise_altitude_ft: int = Field(
-        ..., description="Requested cruise altitude in feet"
-    )
-    target_cruise_altitude_m: float = Field(
-        ..., description="Requested cruise altitude in meters"
-    )
-    wind_speed_kt: float = Field(
-        ..., description="Wind speed in knots at the matched pressure level"
-    )
-    wind_direction_deg: float = Field(
-        ..., ge=0, lt=360, description="Meteorological wind direction in degrees (from)"
-    )
-    temperature_c: Optional[float] = Field(
-        default=None, description="Temperature in Celsius if available"
-    )
-    forecast_time: str = Field(
-        ..., description="Forecast timestamp selected from the model"
-    )
-    source: str = Field(..., description="Weather source identifier")
+    selected_pressure_level_hpa: int
+    selected_geopotential_height_m: float
+    target_cruise_altitude_ft: int
+    target_cruise_altitude_m: float
+    wind_speed_kt: float
+    wind_direction_deg: float = Field(..., ge=0, lt=360)
+    temperature_c: Optional[float] = None
+    forecast_time: str
+    source: str
 
 
 class RouteSegmentWithWeather(BaseModel):
@@ -137,20 +113,12 @@ class PreflightWeatherResponse(BaseModel):
 
 
 class SegmentWindComponents(BaseModel):
-    headwind_component_kt: float = Field(
-        ..., description="Positive means headwind, negative means tailwind"
-    )
-    tailwind_component_kt: float = Field(
-        ..., description="Positive tailwind magnitude, 0 if none"
-    )
-    crosswind_component_kt: float = Field(..., description="Signed crosswind component")
-    crosswind_abs_kt: float = Field(..., description="Absolute crosswind magnitude")
-    wind_relative_angle_deg: float = Field(
-        ..., description="Angle between course and wind-from direction"
-    )
-    estimated_groundspeed_kt: Optional[float] = Field(
-        default=None, description="Estimated groundspeed if TAS is provided"
-    )
+    headwind_component_kt: float
+    tailwind_component_kt: float
+    crosswind_component_kt: float
+    crosswind_abs_kt: float
+    wind_relative_angle_deg: float
+    estimated_groundspeed_kt: Optional[float] = None
 
 
 class RouteSegmentWithWind(BaseModel):
@@ -168,7 +136,47 @@ class PreflightWindResponse(BaseModel):
     request: PreflightRequest
     origin_airport: AirportResponse
     destination_airport: AirportResponse
-    tas_used_kt: float = Field(
-        ..., description="True airspeed used for groundspeed estimate"
-    )
+    tas_used_kt: float
     routes_with_wind_analysis: List[RouteWithWindAnalysis]
+
+
+class SegmentPerformance(BaseModel):
+    segment: RouteSegment
+    weather: SegmentWeather
+    wind_components: SegmentWindComponents
+    tas_used_kt: float
+    fuel_flow_kg_s: float
+    segment_time_hr: float
+    segment_time_min: float
+    segment_fuel_kg: float
+    segment_co2_kg: float
+
+
+class RoutePerformance(BaseModel):
+    route: CandidateRoute
+    segments_performance: List[SegmentPerformance]
+    total_distance_nm: float
+    total_time_hr: float
+    total_time_min: float
+    total_fuel_kg: float
+    total_co2_kg: float
+
+
+class BestRouteSummary(BaseModel):
+    route_id: str
+    route_type: str
+    total_distance_nm: float
+    total_time_min: float
+    total_fuel_kg: float
+    total_co2_kg: float
+
+
+class PreflightPerformanceResponse(BaseModel):
+    request: PreflightRequest
+    origin_airport: AirportResponse
+    destination_airport: AirportResponse
+    tas_used_kt: float
+    aircraft_mass_kg: float
+    cruise_altitude_ft: int
+    routes_performance: List[RoutePerformance]
+    best_route: BestRouteSummary
