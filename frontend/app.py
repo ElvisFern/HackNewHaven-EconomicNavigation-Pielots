@@ -217,7 +217,7 @@ def render_route_map(
     st.pydeck_chart(deck, use_container_width=True)
 
 
-st.title("✈️ P!lot")
+st.title("✈️ P!lot - Pre-Flight Advisory")
 
 st.sidebar.header("Flight Inputs")
 
@@ -439,4 +439,6 @@ if optimize:
             st.markdown("**Advisory**")
             st.write(advisory_result["advisory_text"])
 else:
-    st.info("Enter flight details and click Optimize Route to compare fuel, time, and emissions together.")
+    st.info(
+        "Enter flight details and click Optimize Route for pre-flight advisory. Use the In-Flight Simulation page for real-time rerouting."
+    )
