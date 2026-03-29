@@ -94,8 +94,45 @@ def render_route_map(
     destination_lat: float,
     destination_lon: float,
 ) -> None:
+    # Build a simple curved arc using a lifted midpoint
     midpoint_lat = (origin_lat + destination_lat) / 2
     midpoint_lon = (origin_lon + destination_lon) / 2
+
+    dx = destination_lon - origin_lon
+    dy = destination_lat - origin_lat
+
+    # perpendicular unit vector
+    length = (dx**2 + dy**2) ** 0.5
+    if length == 0:
+        length = 1.0
+
+    px = -dy / length
+    py = dx / length
+
+    # arc height scaled by route length
+    arc_offset = min(max(length * 0.18, 0.8), 3.0)
+
+    control_lon = midpoint_lon + px * arc_offset
+    control_lat = midpoint_lat + py * arc_offset
+
+    # Generate curved path points using quadratic Bezier interpolation
+    path_points = []
+    for t in [i / 40 for i in range(41)]:
+        lon = (
+            (1 - t) ** 2 * origin_lon
+            + 2 * (1 - t) * t * control_lon
+            + t**2 * destination_lon
+        )
+        lat = (
+            (1 - t) ** 2 * origin_lat
+            + 2 * (1 - t) * t * control_lat
+            + t**2 * destination_lat
+        )
+        path_points.append([lon, lat])
+
+    # Place plane around the middle of the curve
+    plane_idx = len(path_points) // 2
+    plane_lon, plane_lat = path_points[plane_idx]
 
     airport_points = pd.DataFrame(
         [
@@ -107,10 +144,7 @@ def render_route_map(
     route_line = pd.DataFrame(
         [
             {
-                "path": [
-                    [origin_lon, origin_lat],
-                    [destination_lon, destination_lat],
-                ]
+                "path": path_points,
             }
         ]
     )
@@ -118,8 +152,8 @@ def render_route_map(
     plane_label = pd.DataFrame(
         [
             {
-                "lat": midpoint_lat,
-                "lon": midpoint_lon,
+                "lat": plane_lat,
+                "lon": plane_lon,
                 "label": "✈",
             }
         ]
@@ -138,7 +172,7 @@ def render_route_map(
                 "PathLayer",
                 data=route_line,
                 get_path="path",
-                get_color=[255, 255, 0],
+                get_color=[255, 215, 0],
                 width_scale=6,
                 width_min_pixels=4,
                 pickable=True,
