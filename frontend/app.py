@@ -3,6 +3,7 @@ import streamlit as st
 from datetime import datetime, time
 from pathlib import Path
 import pandas as pd
+import pydeck as pdk
 
 st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
 
@@ -16,10 +17,12 @@ BACKEND_BASE_URL = "http://localhost:8000"
 
 @st.cache_data
 def load_airport_options() -> pd.DataFrame:
+    airport_file = Path(__file__).resolve().parent.parent / "backend" / "data" / "airports.csv"
 
-    airport_file = (
-        Path(__file__).resolve().parent.parent / "backend" / "data" / "airports.csv"
-    )
+    if not airport_file.exists():
+        raise FileNotFoundError(
+            f"Could not find airports.csv at expected path: {airport_file}"
+        )
 
     df = pd.read_csv(airport_file)
 
@@ -38,7 +41,7 @@ def load_airport_options() -> pd.DataFrame:
     )
 
     df = df.sort_values(["iata_code", "name"]).drop_duplicates(subset=["iata_code"])
-    return df[["iata_code", "label"]].reset_index(drop=True)
+    return df[["iata_code", "label", "latitude_deg", "longitude_deg"]].reset_index(drop=True)
 
 
 def get_index_for_code(options_df: pd.DataFrame, code: str, fallback: int = 0) -> int:
@@ -83,10 +86,101 @@ def build_route_options_table(result: dict) -> list[dict]:
     return rows
 
 
+def render_route_map(
+    origin_code: str,
+    destination_code: str,
+    origin_lat: float,
+    origin_lon: float,
+    destination_lat: float,
+    destination_lon: float,
+) -> None:
+    midpoint_lat = (origin_lat + destination_lat) / 2
+    midpoint_lon = (origin_lon + destination_lon) / 2
+
+    airport_points = pd.DataFrame(
+        [
+            {"code": origin_code, "lat": origin_lat, "lon": origin_lon},
+            {"code": destination_code, "lat": destination_lat, "lon": destination_lon},
+        ]
+    )
+
+    route_line = pd.DataFrame(
+        [
+            {
+                "path": [
+                    [origin_lon, origin_lat],
+                    [destination_lon, destination_lat],
+                ]
+            }
+        ]
+    )
+
+    plane_label = pd.DataFrame(
+        [
+            {
+                "lat": midpoint_lat,
+                "lon": midpoint_lon,
+                "label": "✈",
+            }
+        ]
+    )
+
+    view_state = pdk.ViewState(
+        latitude=midpoint_lat,
+        longitude=midpoint_lon,
+        zoom=4,
+        pitch=0,
+    )
+
+    deck = pdk.Deck(
+        layers=[
+            pdk.Layer(
+                "PathLayer",
+                data=route_line,
+                get_path="path",
+                get_color=[255, 255, 0],
+                width_scale=6,
+                width_min_pixels=4,
+                pickable=True,
+            ),
+            pdk.Layer(
+                "ScatterplotLayer",
+                data=airport_points,
+                get_position="[lon, lat]",
+                get_fill_color=[0, 128, 255],
+                get_radius=25000,
+                pickable=True,
+            ),
+            pdk.Layer(
+                "TextLayer",
+                data=airport_points,
+                get_position="[lon, lat]",
+                get_text="code",
+                get_size=16,
+                get_color=[255, 255, 255],
+                get_text_anchor="'start'",
+                get_alignment_baseline="'bottom'",
+            ),
+            pdk.Layer(
+                "TextLayer",
+                data=plane_label,
+                get_position="[lon, lat]",
+                get_text="label",
+                get_size=24,
+                get_color=[255, 255, 255],
+                get_text_anchor="'middle'",
+                get_alignment_baseline="'center'",
+            ),
+        ],
+        initial_view_state=view_state,
+        tooltip={"text": "{code}"},
+    )
+
+    st.pydeck_chart(deck, use_container_width=True)
+
+
 st.title("✈️ AI-Powered Flight Route Optimizer")
-st.caption(
-    "Compare all backend optimization objectives and view the LLM advisory in one run."
-)
+st.caption("Compare all backend optimization objectives and view the LLM advisory in one run.")
 
 st.sidebar.header("Flight Inputs")
 
@@ -118,6 +212,14 @@ destination = airport_options_df.loc[
     airport_options_df["label"] == destination_label, "iata_code"
 ].iloc[0]
 
+origin_row = airport_options_df.loc[airport_options_df["label"] == departure_label].iloc[0]
+destination_row = airport_options_df.loc[airport_options_df["label"] == destination_label].iloc[0]
+
+origin_lat = float(origin_row["latitude_deg"])
+origin_lon = float(origin_row["longitude_deg"])
+destination_lat = float(destination_row["latitude_deg"])
+destination_lon = float(destination_row["longitude_deg"])
+
 selected_date = st.sidebar.date_input("Departure Date")
 selected_time = st.sidebar.time_input("Departure Time", value=time(14, 0))
 departure_datetime = datetime.combine(selected_date, selected_time)
@@ -130,9 +232,7 @@ aircraft = st.sidebar.selectbox(
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Optional Aircraft Overrides")
-st.sidebar.caption(
-    "Leave these unchecked to use the backend fallbacks from aircraft_defaults.py."
-)
+st.sidebar.caption("Leave these unchecked to use the backend fallbacks from aircraft_defaults.py.")
 
 use_tas_override = st.sidebar.checkbox("Override TAS (knots)", value=False)
 tas_kt = (
@@ -160,9 +260,7 @@ mass_kg = (
     else None
 )
 
-use_altitude_override = st.sidebar.checkbox(
-    "Override Cruise Altitude (ft)", value=False
-)
+use_altitude_override = st.sidebar.checkbox("Override Cruise Altitude (ft)", value=False)
 cruise_altitude_ft = (
     st.sidebar.number_input(
         "cruise_altitude_ft",
@@ -207,9 +305,7 @@ if optimize:
     advisory_result = None
 
     try:
-        with st.spinner(
-            "Running all objective comparisons and fetching LLM advisory..."
-        ):
+        with st.spinner("Running all objective comparisons and fetching LLM advisory..."):
             for objective in OBJECTIVES:
                 payload = {**base_payload, "objective": objective}
                 performance_results[objective] = call_backend(
@@ -222,6 +318,16 @@ if optimize:
             )
 
         st.success("Optimization complete.")
+
+        st.subheader("Route Map")
+        render_route_map(
+            origin_code=origin,
+            destination_code=destination,
+            origin_lat=origin_lat,
+            origin_lon=origin_lon,
+            destination_lat=destination_lat,
+            destination_lon=destination_lon,
+        )
 
     except Exception as e:
         st.error(f"Request failed: {e}")
@@ -272,15 +378,11 @@ if optimize:
         st.subheader("LLM Advisory Across All Route Options")
         left, right = st.columns([1, 2])
         with left:
-            st.metric(
-                "Recommended Route", advisory_result["advisory_selected_route_id"]
-            )
+            st.metric("Recommended Route", advisory_result["advisory_selected_route_id"])
         with right:
             st.markdown("**Reasoning**")
             st.write(advisory_result["advisory_reasoning"])
             st.markdown("**Advisory**")
             st.write(advisory_result["advisory_text"])
 else:
-    st.info(
-        "Enter flight details and click Optimize Route to compare fuel, time, and emissions together."
-    )
+    st.info("Enter flight details and click Optimize Route to compare fuel, time, and emissions together.")
