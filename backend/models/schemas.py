@@ -216,3 +216,12 @@ class PreflightPerformanceResponse(BaseModel):
     objective_used: str
     routes_performance: List[RoutePerformance]
     best_route: BestRouteSummary
+
+
+class PreflightAdvisoryResponse(BaseModel):
+    request: PreflightRequest
+    objective_used: str
+    advisory_selected_route_id: str
+    advisory_reasoning: str
+    advisory_text: str
+    routes_performance: List[RoutePerformance]
