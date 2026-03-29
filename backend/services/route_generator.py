@@ -109,3 +109,22 @@ def generate_candidate_routes(
     ]
 
     return routes
+
+
+############# For in-flight route generation ###############
+
+
+def generate_candidate_routes_from_position(
+    current_lat: float,
+    current_lon: float,
+    destination: AirportResponse,
+    current_name: str = "CURRENT_POS",
+) -> List[CandidateRoute]:
+    pseudo_origin = AirportResponse(
+        code=current_name,
+        name=current_name,
+        lat=current_lat,
+        lon=current_lon,
+    )
+
+    return generate_candidate_routes(pseudo_origin, destination)

@@ -16,7 +16,11 @@ from models.schemas import (
 from services.advisory_service import AdvisoryServiceError, GeminiAdvisoryService
 from services.airport_service import AirportLookupError, AirportLookupService
 from services.performance_service import PerformanceService, PerformanceServiceError
-from services.route_generator import generate_candidate_routes
+from models.schemas import InFlightPerformanceResponse, InFlightStateRequest, Waypoint
+from services.route_generator import (
+    generate_candidate_routes,
+    generate_candidate_routes_from_position,
+)
 from services.segment_builder import build_all_route_segments
 from services.weather_service import PressureLevelWeatherService, WeatherServiceError
 from services.wind_service import WindAnalysisService
@@ -384,6 +388,96 @@ def generate_preflight_advisory(request: PreflightRequest):
         raise HTTPException(status_code=500, detail=str(e))
     except AdvisoryServiceError as e:
         raise HTTPException(status_code=502, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Unexpected server error: {str(e)}"
+        )
+
+
+############ In-flight advisory endpoints #############
+@app.post("/inflight/performance", response_model=InFlightPerformanceResponse)
+def generate_inflight_performance(request: InFlightStateRequest):
+    if (
+        airport_service is None
+        or weather_service is None
+        or wind_service is None
+        or performance_service is None
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service failed to initialize: {startup_error}",
+        )
+
+    try:
+        destination_airport = airport_service.get_airport_response(request.destination)
+
+        candidate_routes = generate_candidate_routes_from_position(
+            current_lat=request.current_lat,
+            current_lon=request.current_lon,
+            destination=destination_airport,
+        )
+
+        routes_with_segments = build_all_route_segments(candidate_routes)
+
+        # Bridge to existing weather/wind/performance services by reusing PreflightRequest
+        bridge_request = PreflightRequest(
+            origin="HPN",  # placeholder, not operationally used downstream after route generation
+            destination=request.destination,
+            aircraft=request.aircraft,
+            departure_time=request.simulation_time,
+            objective=request.objective,
+            tas_kt=request.tas_kt,
+            mass_kg=request.mass_kg,
+            cruise_altitude_ft=request.cruise_altitude_ft,
+        )
+
+        routes_with_segment_weather = weather_service.attach_weather_to_routes(
+            request=bridge_request,
+            routes_with_segments=routes_with_segments,
+        )
+
+        tas_used_kt, routes_with_wind_analysis = wind_service.attach_wind_components(
+            request=bridge_request,
+            routes_with_segment_weather=routes_with_segment_weather,
+        )
+
+        (
+            aircraft_mass_kg,
+            cruise_altitude_ft,
+            objective_used,
+            routes_performance,
+            best_route,
+        ) = performance_service.evaluate_routes(
+            request=bridge_request,
+            tas_used_kt=tas_used_kt,
+            routes_with_wind_analysis=routes_with_wind_analysis,
+        )
+
+        return InFlightPerformanceResponse(
+            request=request,
+            destination_airport=destination_airport,
+            current_position=Waypoint(
+                name="CURRENT_POS",
+                lat=request.current_lat,
+                lon=request.current_lon,
+            ),
+            tas_used_kt=tas_used_kt,
+            aircraft_mass_kg=aircraft_mass_kg,
+            cruise_altitude_ft=cruise_altitude_ft,
+            objective_used=objective_used,
+            candidate_routes=candidate_routes,
+            routes_performance=routes_performance,
+            best_route=best_route,
+        )
+
+    except AirportLookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except WeatherServiceError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except PerformanceServiceError as e:
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

@@ -225,3 +225,68 @@ class PreflightAdvisoryResponse(BaseModel):
     advisory_reasoning: str
     advisory_text: str
     routes_performance: List[RoutePerformance]
+
+
+############# In-flight Advisory Schemas #############
+
+
+class InFlightStateRequest(BaseModel):
+    current_lat: float = Field(..., ge=-90, le=90)
+    current_lon: float = Field(..., ge=-180, le=180)
+    destination: str = Field(
+        ..., min_length=3, max_length=4, description="IATA or ICAO airport code"
+    )
+    aircraft: str = Field(..., description="Supported aircraft code")
+    simulation_time: datetime = Field(
+        ..., description="Current simulated datetime in ISO format"
+    )
+    objective: str = Field(
+        default="fuel",
+        description="Optimization objective: fuel, time, or emissions",
+    )
+
+    tas_kt: Optional[float] = Field(default=None, gt=0)
+    mass_kg: Optional[float] = Field(default=None, gt=0)
+    cruise_altitude_ft: Optional[int] = Field(default=None, gt=0)
+    current_route_id: Optional[str] = Field(
+        default=None,
+        description="Currently active route identifier, if any",
+    )
+
+    @field_validator("aircraft")
+    @classmethod
+    def normalize_aircraft_inflight(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in SUPPORTED_AIRCRAFT:
+            raise ValueError(
+                f"Unsupported aircraft '{value}'. Supported aircraft: {sorted(SUPPORTED_AIRCRAFT)}"
+            )
+        return value
+
+    @field_validator("destination")
+    @classmethod
+    def normalize_destination_airport_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @field_validator("objective")
+    @classmethod
+    def normalize_objective_inflight(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in SUPPORTED_OBJECTIVES:
+            raise ValueError(
+                f"Unsupported objective '{value}'. Supported objectives: {sorted(SUPPORTED_OBJECTIVES)}"
+            )
+        return value
+
+
+class InFlightPerformanceResponse(BaseModel):
+    request: InFlightStateRequest
+    destination_airport: AirportResponse
+    current_position: Waypoint
+    tas_used_kt: float
+    aircraft_mass_kg: float
+    cruise_altitude_ft: int
+    objective_used: str
+    candidate_routes: List[CandidateRoute]
+    routes_performance: List[RoutePerformance]
+    best_route: BestRouteSummary
