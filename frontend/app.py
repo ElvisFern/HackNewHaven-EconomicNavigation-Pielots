@@ -4,8 +4,44 @@ from datetime import datetime, timedelta, time
 from pathlib import Path
 import pandas as pd
 import pydeck as pdk
+from PIL import Image
 
 st.set_page_config(page_title="P!lot - Pre-Flight Advisory", layout="wide")
+
+st.markdown(
+    """
+<style>
+    .stApp {
+        background-color: white;
+        color: black;
+    }
+
+    .main, .block-container {
+        background-color: white;
+        color: black;
+    }
+
+    h1, h2, h3, h4, h5, h6, p, div, label, span {
+        color: black !important;
+    }
+
+    [data-testid="stSidebar"] {
+        background-color: #f7f7f7;
+    }
+
+    [data-testid="stSidebar"] * {
+        color: black !important;
+    }
+
+    .stAlert {
+        color: black !important;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+
 
 OBJECTIVES = ["fuel", "time", "emissions"]
 BACKEND_BASE_URL = "http://localhost:8000"
@@ -268,12 +304,28 @@ def render_route_map(
         ],
         initial_view_state=view_state,
         tooltip={"text": "{code}"},
+        map_style="light",
     )
 
     st.pydeck_chart(deck, use_container_width=True)
 
 
-st.title("✈️ P!lot - Pre-Flight Advisory")
+logo_path = Path(__file__).resolve().parent / "logo.png"
+
+if logo_path.exists():
+    logo = Image.open(logo_path)
+    title_col1, title_col2 = st.columns([1, 6])
+
+    with title_col1:
+        st.image(logo, width=90)
+
+    with title_col2:
+        st.markdown(
+            "<h1 style='margin-top: 10px;'>P!lot - Pre-Flight Advisory</h1>",
+            unsafe_allow_html=True,
+        )
+else:
+    st.title("✈️ P!lot - Pre-Flight Advisory")
 
 st.sidebar.header("Flight Inputs")
 
@@ -342,9 +394,8 @@ aircraft = st.sidebar.selectbox(
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Optional Aircraft Overrides")
-st.sidebar.caption("Leave these unchecked to use the backend fallbacks from aircraft_defaults.py.")
 
-use_tas_override = st.sidebar.checkbox("Override TAS (knots)", value=False)
+use_tas_override = st.sidebar.checkbox("Override Default TAS (knots)", value=False)
 tas_kt = (
     st.sidebar.number_input(
         "tas_kt",
@@ -357,7 +408,7 @@ tas_kt = (
     else None
 )
 
-use_mass_override = st.sidebar.checkbox("Override Mass (kg)", value=False)
+use_mass_override = st.sidebar.checkbox("Override Default Mass (kg)", value=False)
 mass_kg = (
     st.sidebar.number_input(
         "mass_kg",
@@ -370,7 +421,7 @@ mass_kg = (
     else None
 )
 
-use_altitude_override = st.sidebar.checkbox("Override Cruise Altitude (ft)", value=False)
+use_altitude_override = st.sidebar.checkbox("Override Default Cruise Altitude (ft)", value=False)
 cruise_altitude_ft = (
     st.sidebar.number_input(
         "cruise_altitude_ft",
@@ -514,8 +565,6 @@ if optimize:
             st.markdown("**Advisory**")
             st.write(advisory_result["advisory_text"])
 
-        with st.expander("Full advisory response", expanded=False):
-            st.json(advisory_result)
 else:
     st.info(
         "Enter flight details and click Optimize Route for pre-flight advisory. "

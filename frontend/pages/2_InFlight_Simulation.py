@@ -4,10 +4,46 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
 import pydeck as pdk
+from PIL import Image
 
 from simulator import SimulationState, InFlightSimulator
 
 st.set_page_config(page_title="In-Flight Simulation", layout="wide")
+
+st.markdown(
+    """
+<style>
+    .stApp {
+        background-color: white;
+        color: black;
+    }
+
+    .main, .block-container {
+        background-color: white;
+        color: black;
+    }
+
+    h1, h2, h3, h4, h5, h6, p, div, label, span {
+        color: black !important;
+    }
+
+    [data-testid="stSidebar"] {
+        background-color: #f7f7f7;
+    }
+
+    [data-testid="stSidebar"] * {
+        color: black !important;
+    }
+
+    .stAlert {
+        color: black !important;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+
 
 BACKEND_BASE_URL = "http://localhost:8000"
 DEFAULT_STEP_MINUTES = 5.0
@@ -205,7 +241,23 @@ def reset_simulation_session() -> None:
     st.session_state.latest_simulation_result = None
 
 
-st.title("🛫 In-Flight Advisory Simulation")
+logo_path = Path(__file__).resolve().parent.parent / "logo.png"
+
+if logo_path.exists():
+    logo = Image.open(logo_path)
+    title_col1, title_col2 = st.columns([1, 6])
+
+    with title_col1:
+        st.image(logo, width=90)
+
+    with title_col2:
+        st.markdown(
+            "<h1 style='margin-top: 10px;'>In-Flight Advisory Simulation</h1>",
+            unsafe_allow_html=True,
+        )
+else:
+    st.title("🛫 In-Flight Advisory Simulation")
+
 st.caption("Simulate real-time rerouting from the current aircraft position to the destination.")
 
 init_simulation_session()
