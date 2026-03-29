@@ -3,8 +3,10 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from config.aircraft_defaults import AIRCRAFT_DEFAULTS
 
-SUPPORTED_AIRCRAFT = {"c550", "glf6"}
+
+SUPPORTED_AIRCRAFT = set(AIRCRAFT_DEFAULTS.keys())
 SUPPORTED_OBJECTIVES = {"fuel", "time", "emissions"}
 
 

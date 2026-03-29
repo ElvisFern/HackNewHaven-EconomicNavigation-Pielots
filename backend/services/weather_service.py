@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple
 
 import requests
 
+from config.aircraft_defaults import AIRCRAFT_DEFAULTS
 from models.schemas import (
     PreflightRequest,
     RouteSegmentWithWeather,
@@ -38,65 +39,57 @@ class PressureLevelWeatherService:
 
     BASE_URL = "https://api.open-meteo.com/v1/ecmwf"
 
-    # These levels are chosen because they are relevant for higher-altitude flight planning.
-    # You can expand this list later if needed.
     LEVELS: List[PressureLevelConfig] = [
         PressureLevelConfig(
-            hpa=700,
-            wind_speed_var="wind_speed_700hPa",
-            wind_direction_var="wind_direction_700hPa",
-            geopotential_height_var="geopotential_height_700hPa",
-            temperature_var="temperature_700hPa",
+            700,
+            "wind_speed_700hPa",
+            "wind_direction_700hPa",
+            "geopotential_height_700hPa",
+            "temperature_700hPa",
         ),
         PressureLevelConfig(
-            hpa=600,
-            wind_speed_var="wind_speed_600hPa",
-            wind_direction_var="wind_direction_600hPa",
-            geopotential_height_var="geopotential_height_600hPa",
-            temperature_var="temperature_600hPa",
+            600,
+            "wind_speed_600hPa",
+            "wind_direction_600hPa",
+            "geopotential_height_600hPa",
+            "temperature_600hPa",
         ),
         PressureLevelConfig(
-            hpa=500,
-            wind_speed_var="wind_speed_500hPa",
-            wind_direction_var="wind_direction_500hPa",
-            geopotential_height_var="geopotential_height_500hPa",
-            temperature_var="temperature_500hPa",
+            500,
+            "wind_speed_500hPa",
+            "wind_direction_500hPa",
+            "geopotential_height_500hPa",
+            "temperature_500hPa",
         ),
         PressureLevelConfig(
-            hpa=400,
-            wind_speed_var="wind_speed_400hPa",
-            wind_direction_var="wind_direction_400hPa",
-            geopotential_height_var="geopotential_height_400hPa",
-            temperature_var="temperature_400hPa",
+            400,
+            "wind_speed_400hPa",
+            "wind_direction_400hPa",
+            "geopotential_height_400hPa",
+            "temperature_400hPa",
         ),
         PressureLevelConfig(
-            hpa=300,
-            wind_speed_var="wind_speed_300hPa",
-            wind_direction_var="wind_direction_300hPa",
-            geopotential_height_var="geopotential_height_300hPa",
-            temperature_var="temperature_300hPa",
+            300,
+            "wind_speed_300hPa",
+            "wind_direction_300hPa",
+            "geopotential_height_300hPa",
+            "temperature_300hPa",
         ),
         PressureLevelConfig(
-            hpa=250,
-            wind_speed_var="wind_speed_250hPa",
-            wind_direction_var="wind_direction_250hPa",
-            geopotential_height_var="geopotential_height_250hPa",
-            temperature_var="temperature_250hPa",
+            250,
+            "wind_speed_250hPa",
+            "wind_direction_250hPa",
+            "geopotential_height_250hPa",
+            "temperature_250hPa",
         ),
         PressureLevelConfig(
-            hpa=200,
-            wind_speed_var="wind_speed_200hPa",
-            wind_direction_var="wind_direction_200hPa",
-            geopotential_height_var="geopotential_height_200hPa",
-            temperature_var="temperature_200hPa",
+            200,
+            "wind_speed_200hPa",
+            "wind_direction_200hPa",
+            "geopotential_height_200hPa",
+            "temperature_200hPa",
         ),
     ]
-
-    # Simple defaults for your currently supported aircraft.
-    DEFAULT_CRUISE_ALTITUDE_FT = {
-        "c550": 35000,
-        "glf6": 41000,
-    }
 
     def __init__(self, timeout_seconds: int = 30) -> None:
         self.timeout_seconds = timeout_seconds
@@ -106,7 +99,10 @@ class PressureLevelWeatherService:
         return feet * 0.3048
 
     def get_default_cruise_altitude_ft(self, aircraft: str) -> int:
-        return self.DEFAULT_CRUISE_ALTITUDE_FT.get(aircraft.lower(), 35000)
+        aircraft_key = aircraft.lower()
+        if aircraft_key not in AIRCRAFT_DEFAULTS:
+            raise WeatherServiceError(f"Missing aircraft defaults for '{aircraft_key}'")
+        return int(AIRCRAFT_DEFAULTS[aircraft_key]["cruise_altitude_ft"])
 
     def _build_hourly_vars(self) -> List[str]:
         variables: List[str] = []

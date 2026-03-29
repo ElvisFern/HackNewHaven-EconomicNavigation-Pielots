@@ -1,7 +1,8 @@
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 from openap import Emission, FuelFlow
 
+from config.aircraft_defaults import AIRCRAFT_DEFAULTS
 from models.schemas import (
     BestRouteSummary,
     PreflightRequest,
@@ -21,21 +22,21 @@ class PerformanceService:
     then aggregates results per route.
     """
 
-    DEFAULT_MASS_KG: Dict[str, float] = {
-        "c550": 10000.0,
-        "glf6": 30000.0,
-    }
-
-    DEFAULT_CRUISE_ALTITUDE_FT: Dict[str, int] = {
-        "c550": 35000,
-        "glf6": 41000,
-    }
-
     def get_default_mass_kg(self, aircraft: str) -> float:
-        return self.DEFAULT_MASS_KG.get(aircraft.lower(), 10000.0)
+        aircraft_key = aircraft.lower()
+        if aircraft_key not in AIRCRAFT_DEFAULTS:
+            raise PerformanceServiceError(
+                f"Missing aircraft defaults for '{aircraft_key}'"
+            )
+        return float(AIRCRAFT_DEFAULTS[aircraft_key]["mass_kg"])
 
     def get_default_cruise_altitude_ft(self, aircraft: str) -> int:
-        return self.DEFAULT_CRUISE_ALTITUDE_FT.get(aircraft.lower(), 35000)
+        aircraft_key = aircraft.lower()
+        if aircraft_key not in AIRCRAFT_DEFAULTS:
+            raise PerformanceServiceError(
+                f"Missing aircraft defaults for '{aircraft_key}'"
+            )
+        return int(AIRCRAFT_DEFAULTS[aircraft_key]["cruise_altitude_ft"])
 
     def _get_openap_models(self, aircraft: str) -> Tuple[FuelFlow, Emission]:
         try:

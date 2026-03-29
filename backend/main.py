@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 
+from config.aircraft_defaults import AIRCRAFT_DEFAULTS
 from models.schemas import (
     PreflightPerformanceResponse,
     PreflightRequest,
@@ -22,7 +23,7 @@ AIRPORT_DATA_FILE = BASE_DIR / "data" / "airports.csv"
 
 app = FastAPI(
     title="Pre-Flight Route Recommendation API",
-    version="0.6.0",
+    version="0.6.1",
     description=(
         "Pre-flight MVP API for input validation, dynamic airport lookup, "
         "candidate route generation, route segmentation, pressure-level weather lookup, "
@@ -58,7 +59,7 @@ def root():
         "status": "ok",
         "message": "Pre-flight API is running.",
         "airport_data_source": str(AIRPORT_DATA_FILE.name),
-        "supported_aircraft": ["c550", "glf6"],
+        "supported_aircraft": sorted(AIRCRAFT_DEFAULTS.keys()),
         "supported_objectives": ["fuel", "time", "emissions"],
     }
 
@@ -155,6 +156,7 @@ def generate_preflight_weather(request: PreflightRequest):
             origin_airport, destination_airport
         )
         routes_with_segments = build_all_route_segments(candidate_routes)
+
         routes_with_segment_weather = weather_service.attach_weather_to_routes(
             request=request,
             routes_with_segments=routes_with_segments,

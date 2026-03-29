@@ -1,9 +1,9 @@
 import math
-from typing import Dict, List
+from typing import List
 
+from config.aircraft_defaults import AIRCRAFT_DEFAULTS
 from models.schemas import (
     PreflightRequest,
-    RouteSegmentWithWeather,
     RouteSegmentWithWind,
     RouteWithSegmentWeather,
     RouteWithWindAnalysis,
@@ -17,13 +17,11 @@ class WindAnalysisService:
     relative to the route segment bearing.
     """
 
-    DEFAULT_TAS_KT: Dict[str, float] = {
-        "c550": 380.0,
-        "glf6": 488.0,
-    }
-
     def get_default_tas_kt(self, aircraft: str) -> float:
-        return self.DEFAULT_TAS_KT.get(aircraft.lower(), 400.0)
+        aircraft_key = aircraft.lower()
+        if aircraft_key not in AIRCRAFT_DEFAULTS:
+            raise ValueError(f"Missing aircraft defaults for '{aircraft_key}'")
+        return float(AIRCRAFT_DEFAULTS[aircraft_key]["tas_kt"])
 
     @staticmethod
     def _normalize_angle_deg(angle: float) -> float:
@@ -36,20 +34,9 @@ class WindAnalysisService:
         wind_direction_deg: float,
         tas_kt: float | None = None,
     ) -> SegmentWindComponents:
-        """
-        wind_direction_deg is the meteorological 'from' direction.
-
-        headwind_component_kt:
-            positive -> headwind
-            negative -> tailwind
-
-        crosswind_component_kt:
-            signed crosswind based on sin(theta)
-        """
         relative_angle_deg = self._normalize_angle_deg(
             wind_direction_deg - course_bearing_deg
         )
-
         theta_rad = math.radians(relative_angle_deg)
 
         headwind_component = wind_speed_kt * math.cos(theta_rad)
