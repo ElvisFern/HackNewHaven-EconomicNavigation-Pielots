@@ -45,8 +45,8 @@ class PerformanceService:
 
     def _get_openap_models(self, aircraft: str) -> Tuple[FuelFlow, Emission]:
         try:
-            ff_model = FuelFlow(ac=aircraft)
-            em_model = Emission(ac=aircraft)
+            ff_model = FuelFlow(ac=aircraft, use_synonym=True)
+            em_model = Emission(ac=aircraft, use_synonym=True)
             return ff_model, em_model
         except Exception as e:
             raise PerformanceServiceError(

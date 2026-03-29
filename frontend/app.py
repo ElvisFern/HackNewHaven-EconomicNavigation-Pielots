@@ -7,10 +7,15 @@ import pydeck as pdk
 
 st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
 
-SUPPORTED_AIRCRAFT = {
-    "c550": "Cessna Citation 550",
-    "glf6": "Gulfstream G650",
-}
+
+@st.cache_data
+def load_supported_aircraft() -> list[str]:
+    response = requests.get(f"{BACKEND_BASE_URL}/", timeout=30)
+    response.raise_for_status()
+    data = response.json()
+    return data["supported_aircraft"]
+
+
 OBJECTIVES = ["fuel", "time", "emissions"]
 BACKEND_BASE_URL = "http://localhost:8000"
 
@@ -76,7 +81,6 @@ def build_route_options_table(result: dict) -> list[dict]:
             {
                 "Best?": "✅" if route["route_id"] == best_route_id else "",
                 "Route ID": route["route_id"],
-                "Route Type": route["type"],
                 "Distance (nm)": route_perf["total_distance_nm"],
                 "Time (min)": route_perf["total_time_min"],
                 "Fuel (kg)": route_perf["total_fuel_kg"],
@@ -213,8 +217,7 @@ def render_route_map(
     st.pydeck_chart(deck, use_container_width=True)
 
 
-st.title("✈️ AI-Powered Flight Route Optimizer")
-st.caption("Compare all backend optimization objectives and view the LLM advisory in one run.")
+st.title("✈️ P!lot")
 
 st.sidebar.header("Flight Inputs")
 
@@ -258,10 +261,11 @@ selected_date = st.sidebar.date_input("Departure Date")
 selected_time = st.sidebar.time_input("Departure Time", value=time(14, 0))
 departure_datetime = datetime.combine(selected_date, selected_time)
 
+supported_aircraft = load_supported_aircraft()
+
 aircraft = st.sidebar.selectbox(
     "Aircraft Type",
-    options=list(SUPPORTED_AIRCRAFT.keys()),
-    format_func=lambda code: f"{SUPPORTED_AIRCRAFT[code]} ({code})",
+    options=supported_aircraft,
 )
 
 st.sidebar.markdown("---")
@@ -329,9 +333,6 @@ def build_base_payload() -> dict:
     return payload
 
 
-with st.expander("Request preview", expanded=False):
-    st.json(build_base_payload())
-
 if optimize:
     base_payload = build_base_payload()
 
@@ -384,7 +385,6 @@ if optimize:
                 st.markdown("### Best Route for This Objective")
                 c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Best Route", best_route["route_id"])
-                c2.metric("Route Type", best_route["route_type"])
                 c3.metric("Time", f"{best_route['total_time_min']} min")
                 c4.metric("Fuel", f"{best_route['total_fuel_kg']} kg")
                 c5.metric("CO₂", f"{best_route['total_co2_kg']} kg")
@@ -398,7 +398,6 @@ if optimize:
                 {
                     "Objective": objective.title(),
                     "Best Route": best_route["route_id"],
-                    "Route Type": best_route["route_type"],
                     "Distance (nm)": best_route["total_distance_nm"],
                     "Time (min)": best_route["total_time_min"],
                     "Fuel (kg)": best_route["total_fuel_kg"],
