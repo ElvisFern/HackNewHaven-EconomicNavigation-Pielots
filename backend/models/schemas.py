@@ -206,10 +206,40 @@ class BestRouteSummary(BaseModel):
     total_co2_kg: float
 
 
+class RunwayMatchSummary(BaseModel):
+    airport_ident: str
+    length_ft: Optional[float] = None
+    width_ft: Optional[float] = None
+    surface: str
+    surface_category: str
+    lighted: bool
+    le_ident: str
+    he_ident: str
+
+
+class AirportRunwayFeasibility(BaseModel):
+    airport_ident: str
+    airport_code: str
+    airport_name: str
+    aircraft: str
+    aircraft_display_name: str
+    feasible: bool
+    reason: str
+    required_min_runway_length_ft: int
+    required_min_runway_width_ft: int
+    allowed_surface_categories: List[str]
+    total_runway_records: int
+    usable_runway_count: int
+    longest_usable_runway_ft: Optional[float] = None
+    matched_runway: Optional[RunwayMatchSummary] = None
+
+
 class PreflightPerformanceResponse(BaseModel):
     request: PreflightRequest
     origin_airport: AirportResponse
     destination_airport: AirportResponse
+    origin_runway_feasibility: AirportRunwayFeasibility
+    destination_runway_feasibility: AirportRunwayFeasibility
     tas_used_kt: float
     aircraft_mass_kg: float
     cruise_altitude_ft: int
@@ -221,13 +251,12 @@ class PreflightPerformanceResponse(BaseModel):
 class PreflightAdvisoryResponse(BaseModel):
     request: PreflightRequest
     objective_used: str
+    origin_runway_feasibility: AirportRunwayFeasibility
+    destination_runway_feasibility: AirportRunwayFeasibility
     advisory_selected_route_id: str
     advisory_reasoning: str
     advisory_text: str
     routes_performance: List[RoutePerformance]
-
-
-############# In-flight Advisory Schemas #############
 
 
 class InFlightStateRequest(BaseModel):
@@ -245,9 +274,21 @@ class InFlightStateRequest(BaseModel):
         description="Optimization objective: fuel, time, or emissions",
     )
 
-    tas_kt: Optional[float] = Field(default=None, gt=0)
-    mass_kg: Optional[float] = Field(default=None, gt=0)
-    cruise_altitude_ft: Optional[int] = Field(default=None, gt=0)
+    tas_kt: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Current true airspeed in knots",
+    )
+    mass_kg: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Current aircraft mass in kilograms",
+    )
+    cruise_altitude_ft: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Current cruise altitude in feet",
+    )
     current_route_id: Optional[str] = Field(
         default=None,
         description="Currently active route identifier, if any",

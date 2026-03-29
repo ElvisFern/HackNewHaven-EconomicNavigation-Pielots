@@ -5,7 +5,10 @@ from pathlib import Path
 import pandas as pd
 import pydeck as pdk
 
-st.set_page_config(page_title="AI Flight Optimizer", layout="wide")
+st.set_page_config(page_title="P!lot - Pre-Flight Advisory", layout="wide")
+
+OBJECTIVES = ["fuel", "time", "emissions"]
+BACKEND_BASE_URL = "http://localhost:8000"
 
 
 @st.cache_data
@@ -14,10 +17,6 @@ def load_supported_aircraft() -> list[str]:
     response.raise_for_status()
     data = response.json()
     return data["supported_aircraft"]
-
-
-OBJECTIVES = ["fuel", "time", "emissions"]
-BACKEND_BASE_URL = "http://localhost:8000"
 
 
 @st.cache_data
@@ -37,7 +36,6 @@ def load_airport_options() -> pd.DataFrame:
     for col in ["name", "municipality", "iso_country", "iata_code"]:
         df[col] = df[col].fillna("").astype(str).str.strip()
 
-    # Keep only rows with IATA code for cleaner dropdown UX
     df = df[df["iata_code"] != ""].copy()
 
     df["label"] = df.apply(
@@ -58,6 +56,7 @@ def get_index_for_code(options_df: pd.DataFrame, code: str, fallback: int = 0) -
 
 def call_backend(endpoint: str, payload: dict) -> dict:
     response = requests.post(endpoint, json=payload, timeout=120)
+
     try:
         response_json = response.json()
     except ValueError:
@@ -66,9 +65,48 @@ def call_backend(endpoint: str, payload: dict) -> dict:
 
     if not response.ok:
         detail = response_json.get("detail", response.text)
-        raise RuntimeError(str(detail))
+        raise RuntimeError(detail)
 
     return response_json
+
+
+def render_backend_error(error: Exception) -> None:
+    detail = error.args[0] if error.args else str(error)
+
+    if isinstance(detail, dict):
+        message = detail.get("message", "Request failed.")
+        runway = detail.get("runway_feasibility")
+
+        st.error(message)
+
+        if runway:
+            st.warning(
+                "This airport-aircraft combination is not operationally feasible under the current runway rules."
+            )
+
+            st.markdown("### Runway Feasibility Issue")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Airport", runway.get("airport_code", "—"))
+            c2.metric("Aircraft", runway.get("aircraft", "—"))
+            c3.metric("Feasible", "No")
+
+            st.write(runway.get("reason", "No explanation provided."))
+
+            c4, c5 = st.columns(2)
+            c4.metric(
+                "Required Min Length (ft)",
+                runway.get("required_min_runway_length_ft", "—"),
+            )
+            c5.metric(
+                "Required Min Width (ft)",
+                runway.get("required_min_runway_width_ft", "—"),
+            )
+
+        else:
+            with st.expander("Error details", expanded=False):
+                st.json(detail)
+    else:
+        st.error(f"Request failed: {detail}")
 
 
 def build_route_options_table(result: dict) -> list[dict]:
@@ -90,6 +128,35 @@ def build_route_options_table(result: dict) -> list[dict]:
     return rows
 
 
+def render_runway_feasibility_card(title: str, runway: dict) -> None:
+    st.markdown(f"### {title}")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Airport", runway.get("airport_code", "—"))
+    c2.metric("Feasible", "Yes" if runway.get("feasible") else "No")
+    c3.metric("Usable Runways", runway.get("usable_runway_count", 0))
+
+    c4, c5 = st.columns(2)
+    c4.metric(
+        "Required Min Length (ft)",
+        runway.get("required_min_runway_length_ft", "—"),
+    )
+    c5.metric(
+        "Required Min Width (ft)",
+        runway.get("required_min_runway_width_ft", "—"),
+    )
+
+    matched = runway.get("matched_runway")
+    if matched:
+        st.caption(
+            f"Matched runway: {matched.get('le_ident', '')}/{matched.get('he_ident', '')} "
+            f"• {matched.get('length_ft', '—')} ft × {matched.get('width_ft', '—')} ft "
+            f"• {matched.get('surface_category', '—')}"
+        )
+
+    st.write(runway.get("reason", ""))
+
+
 def render_route_map(
     origin_code: str,
     destination_code: str,
@@ -98,14 +165,12 @@ def render_route_map(
     destination_lat: float,
     destination_lon: float,
 ) -> None:
-    # Build a simple curved arc using a lifted midpoint
     midpoint_lat = (origin_lat + destination_lat) / 2
     midpoint_lon = (origin_lon + destination_lon) / 2
 
     dx = destination_lon - origin_lon
     dy = destination_lat - origin_lat
 
-    # perpendicular unit vector
     length = (dx**2 + dy**2) ** 0.5
     if length == 0:
         length = 1.0
@@ -113,13 +178,11 @@ def render_route_map(
     px = -dy / length
     py = dx / length
 
-    # arc height scaled by route length
     arc_offset = min(max(length * 0.18, 0.8), 3.0)
 
     control_lon = midpoint_lon + px * arc_offset
     control_lat = midpoint_lat + py * arc_offset
 
-    # Generate curved path points using quadratic Bezier interpolation
     path_points = []
     for t in [i / 40 for i in range(41)]:
         lon = (
@@ -134,7 +197,6 @@ def render_route_map(
         )
         path_points.append([lon, lat])
 
-    # Place plane around the middle of the curve
     plane_idx = len(path_points) // 2
     plane_lon, plane_lat = path_points[plane_idx]
 
@@ -145,13 +207,7 @@ def render_route_map(
         ]
     )
 
-    route_line = pd.DataFrame(
-        [
-            {
-                "path": path_points,
-            }
-        ]
-    )
+    route_line = pd.DataFrame([{"path": path_points}])
 
     plane_label = pd.DataFrame(
         [
@@ -375,6 +431,21 @@ if optimize:
 
         st.success("Optimization complete.")
 
+        if advisory_result:
+            st.subheader("Runway Feasibility")
+
+            r1, r2 = st.columns(2)
+            with r1:
+                render_runway_feasibility_card(
+                    "Departure Airport",
+                    advisory_result["origin_runway_feasibility"],
+                )
+            with r2:
+                render_runway_feasibility_card(
+                    "Destination Airport",
+                    advisory_result["destination_runway_feasibility"],
+                )
+
         st.subheader("Route Map")
         render_route_map(
             origin_code=origin,
@@ -386,7 +457,7 @@ if optimize:
         )
 
     except Exception as e:
-        st.error(f"Request failed: {e}")
+        render_backend_error(e)
 
     if performance_results:
         st.subheader("All Route Options")
@@ -404,11 +475,15 @@ if optimize:
                 st.dataframe(route_rows, use_container_width=True, hide_index=True)
 
                 st.markdown("### Best Route for This Objective")
-                c1, c2, c3, c4, c5 = st.columns(5)
+                c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Best Route", best_route["route_id"])
+                c2.metric("Distance", f"{best_route['total_distance_nm']} nm")
                 c3.metric("Time", f"{best_route['total_time_min']} min")
                 c4.metric("Fuel", f"{best_route['total_fuel_kg']} kg")
+
+                c5, c6 = st.columns(2)
                 c5.metric("CO₂", f"{best_route['total_co2_kg']} kg")
+                c6.metric("Objective", best_route["objective_used"].title())
 
         st.subheader("Best Routes Summary")
 
@@ -438,7 +513,11 @@ if optimize:
             st.write(advisory_result["advisory_reasoning"])
             st.markdown("**Advisory**")
             st.write(advisory_result["advisory_text"])
+
+        with st.expander("Full advisory response", expanded=False):
+            st.json(advisory_result)
 else:
     st.info(
-        "Enter flight details and click Optimize Route for pre-flight advisory. Use the In-Flight Simulation page for real-time rerouting."
+        "Enter flight details and click Optimize Route for pre-flight advisory. "
+        "Use the In-Flight Simulation page for real-time rerouting."
     )
