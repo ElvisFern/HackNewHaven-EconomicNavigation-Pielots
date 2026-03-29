@@ -17,11 +17,6 @@ class PerformanceServiceError(Exception):
 
 
 class PerformanceService:
-    """
-    Uses OpenAP to estimate fuel flow, fuel burn, and CO2 for each segment,
-    then aggregates results per route.
-    """
-
     def get_default_mass_kg(self, aircraft: str) -> float:
         aircraft_key = aircraft.lower()
         if aircraft_key not in AIRCRAFT_DEFAULTS:
@@ -37,6 +32,16 @@ class PerformanceService:
                 f"Missing aircraft defaults for '{aircraft_key}'"
             )
         return int(AIRCRAFT_DEFAULTS[aircraft_key]["cruise_altitude_ft"])
+
+    def resolve_mass_kg(self, request: PreflightRequest) -> float:
+        if request.mass_kg is not None:
+            return float(request.mass_kg)
+        return self.get_default_mass_kg(request.aircraft)
+
+    def resolve_cruise_altitude_ft(self, request: PreflightRequest) -> int:
+        if request.cruise_altitude_ft is not None:
+            return int(request.cruise_altitude_ft)
+        return self.get_default_cruise_altitude_ft(request.aircraft)
 
     def _get_openap_models(self, aircraft: str) -> Tuple[FuelFlow, Emission]:
         try:
@@ -70,8 +75,8 @@ class PerformanceService:
     ) -> tuple[float, int, str, List[RoutePerformance], BestRouteSummary]:
         aircraft = request.aircraft.lower()
         objective = request.objective.lower()
-        mass_kg = self.get_default_mass_kg(aircraft)
-        cruise_altitude_ft = self.get_default_cruise_altitude_ft(aircraft)
+        mass_kg = self.resolve_mass_kg(request)
+        cruise_altitude_ft = self.resolve_cruise_altitude_ft(request)
 
         ff_model, em_model = self._get_openap_models(aircraft)
 

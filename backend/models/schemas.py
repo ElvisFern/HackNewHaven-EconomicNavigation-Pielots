@@ -26,6 +26,23 @@ class PreflightRequest(BaseModel):
         description="Optimization objective: fuel, time, or emissions",
     )
 
+    # Optional operating-state overrides
+    tas_kt: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Optional true airspeed override in knots",
+    )
+    mass_kg: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Optional aircraft mass override in kilograms",
+    )
+    cruise_altitude_ft: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Optional cruise altitude override in feet",
+    )
+
     @field_validator("origin", "destination")
     @classmethod
     def normalize_airport_code(cls, value: str) -> str:

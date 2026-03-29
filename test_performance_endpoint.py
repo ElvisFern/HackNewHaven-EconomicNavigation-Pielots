@@ -5,9 +5,12 @@ API_URL = "http://127.0.0.1:8000/preflight/performance"
 payload = {
     "origin": "HPN",
     "destination": "IAD",
-    "aircraft": "c550",
+    "aircraft": "glf6",
     "departure_time": "2026-03-28T14:00:00",
-    "objective": "emissions"
+    "objective": "time",
+    "tas_kt": 500.0,
+    "mass_kg": 28500.0,
+    "cruise_altitude_ft": 43000,
 }
 
 try:

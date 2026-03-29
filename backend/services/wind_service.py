@@ -12,16 +12,16 @@ from models.schemas import (
 
 
 class WindAnalysisService:
-    """
-    Converts weather wind direction/speed into headwind/tailwind/crosswind
-    relative to the route segment bearing.
-    """
-
     def get_default_tas_kt(self, aircraft: str) -> float:
         aircraft_key = aircraft.lower()
         if aircraft_key not in AIRCRAFT_DEFAULTS:
             raise ValueError(f"Missing aircraft defaults for '{aircraft_key}'")
         return float(AIRCRAFT_DEFAULTS[aircraft_key]["tas_kt"])
+
+    def resolve_tas_kt(self, request: PreflightRequest) -> float:
+        if request.tas_kt is not None:
+            return float(request.tas_kt)
+        return self.get_default_tas_kt(request.aircraft)
 
     @staticmethod
     def _normalize_angle_deg(angle: float) -> float:
@@ -68,7 +68,7 @@ class WindAnalysisService:
         request: PreflightRequest,
         routes_with_segment_weather: List[RouteWithSegmentWeather],
     ) -> tuple[float, List[RouteWithWindAnalysis]]:
-        tas_kt = self.get_default_tas_kt(request.aircraft)
+        tas_kt = self.resolve_tas_kt(request)
 
         results: List[RouteWithWindAnalysis] = []
 

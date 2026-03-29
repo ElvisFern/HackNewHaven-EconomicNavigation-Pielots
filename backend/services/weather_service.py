@@ -30,13 +30,6 @@ class PressureLevelConfig:
 
 
 class PressureLevelWeatherService:
-    """
-    Pressure-level winds aloft lookup using Open-Meteo ECMWF forecast data.
-
-    The service chooses the pressure level whose geopotential height is closest
-    to the target cruise altitude.
-    """
-
     BASE_URL = "https://api.open-meteo.com/v1/ecmwf"
 
     LEVELS: List[PressureLevelConfig] = [
@@ -103,6 +96,11 @@ class PressureLevelWeatherService:
         if aircraft_key not in AIRCRAFT_DEFAULTS:
             raise WeatherServiceError(f"Missing aircraft defaults for '{aircraft_key}'")
         return int(AIRCRAFT_DEFAULTS[aircraft_key]["cruise_altitude_ft"])
+
+    def resolve_cruise_altitude_ft(self, request: PreflightRequest) -> int:
+        if request.cruise_altitude_ft is not None:
+            return int(request.cruise_altitude_ft)
+        return self.get_default_cruise_altitude_ft(request.aircraft)
 
     def _build_hourly_vars(self) -> List[str]:
         variables: List[str] = []
@@ -267,9 +265,7 @@ class PressureLevelWeatherService:
         request: PreflightRequest,
         routes_with_segments: List[RouteWithSegments],
     ) -> List[RouteWithSegmentWeather]:
-        target_cruise_altitude_ft = self.get_default_cruise_altitude_ft(
-            request.aircraft
-        )
+        target_cruise_altitude_ft = self.resolve_cruise_altitude_ft(request)
 
         results: List[RouteWithSegmentWeather] = []
 
