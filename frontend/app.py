@@ -1,6 +1,6 @@
 import requests
 import streamlit as st
-from datetime import datetime, time
+from datetime import datetime, timedelta, time
 from pathlib import Path
 import pandas as pd
 import pydeck as pdk
@@ -257,9 +257,25 @@ origin_lon = float(origin_row["longitude_deg"])
 destination_lat = float(destination_row["latitude_deg"])
 destination_lon = float(destination_row["longitude_deg"])
 
-selected_date = st.sidebar.date_input("Departure Date")
-selected_time = st.sidebar.time_input("Departure Time", value=time(14, 0))
+min_departure_dt = (datetime.now() + timedelta(hours=1)).replace(
+    second=0, microsecond=0
+)
+
+selected_date = st.sidebar.date_input(
+    "Departure Date",
+    value=min_departure_dt.date(),
+    min_value=min_departure_dt.date(),
+)
+
+selected_time = st.sidebar.time_input(
+    "Departure Time",
+    value=min_departure_dt.time().replace(second=0, microsecond=0),
+)
+
 departure_datetime = datetime.combine(selected_date, selected_time)
+
+if departure_datetime < min_departure_dt:
+    st.sidebar.error("Departure must be at least 1 hour from now.")
 
 supported_aircraft = load_supported_aircraft()
 
@@ -314,7 +330,12 @@ same_airport = origin == destination
 if same_airport:
     st.sidebar.error("Departure and destination airports must be different.")
 
-optimize = st.sidebar.button("Optimize Route", type="primary", disabled=same_airport)
+invalid_departure = departure_datetime < min_departure_dt
+optimize = st.sidebar.button(
+    "Optimize Route",
+    type="primary",
+    disabled=same_airport or invalid_departure,
+)
 
 
 def build_base_payload() -> dict:
